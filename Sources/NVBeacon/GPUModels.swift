@@ -794,9 +794,35 @@ struct GPUReading: Identifiable, Equatable, Sendable {
     }
 }
 
+struct HostMemoryReading: Equatable, Sendable {
+    let totalKiB: Int
+    let availableKiB: Int
+    let swapTotalKiB: Int?
+    let swapFreeKiB: Int?
+
+    var usedKiB: Int { totalKiB - availableKiB }
+    var usageRatio: Double { Double(usedKiB) / Double(totalKiB) }
+    var usagePercent: Int { Int((usageRatio * 100).rounded()) }
+
+    var swapUsedKiB: Int? {
+        guard let swapTotalKiB, let swapFreeKiB else { return nil }
+        return swapTotalKiB - swapFreeKiB
+    }
+
+    var swapUsageRatio: Double? {
+        guard let swapTotalKiB, let swapUsedKiB else { return nil }
+        return swapTotalKiB > 0 ? Double(swapUsedKiB) / Double(swapTotalKiB) : 0
+    }
+
+    static func capacityText(kibibytes: Int) -> String {
+        String(format: "%.1f GiB", locale: Locale(identifier: "en_US_POSIX"), Double(kibibytes) / 1_048_576)
+    }
+}
+
 struct GPUSnapshot: Equatable, Sendable {
     let takenAt: Date
     let gpus: [GPUReading]
+    var hostMemory: HostMemoryReading? = nil
 
     var averageUtilization: Int {
         guard !gpus.isEmpty else { return 0 }
@@ -847,7 +873,7 @@ struct GPUSnapshot: Equatable, Sendable {
             )
         }
 
-        return GPUSnapshot(takenAt: takenAt, gpus: mergedGPUs)
+        return GPUSnapshot(takenAt: takenAt, gpus: mergedGPUs, hostMemory: hostMemory)
     }
 
     func applyingResolvedProcessMetadata(_ processes: [GPUProcessReading]) -> GPUSnapshot {
@@ -875,7 +901,7 @@ struct GPUSnapshot: Equatable, Sendable {
             )
         }
 
-        return GPUSnapshot(takenAt: takenAt, gpus: updatedGPUs)
+        return GPUSnapshot(takenAt: takenAt, gpus: updatedGPUs, hostMemory: hostMemory)
     }
 }
 

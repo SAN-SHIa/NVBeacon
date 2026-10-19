@@ -228,6 +228,7 @@ struct StatusMenuView: View {
                     UpdatedPill(date: snapshot.takenAt, language: language)
                 }
 
+                HostMemoryView(memory: snapshot.hostMemory, language: language)
                 gpuList(state, snapshot: snapshot)
             } else if state.server.isEnabled {
                 Text(state.lastErrorMessage ?? t("Waiting for the first polling result.", "첫 polling 결과를 기다리는 중입니다."))
@@ -490,6 +491,69 @@ private struct GPUListRow: View {
                     lineWidth: 1
                 )
         )
+    }
+}
+
+private func memoryTint(ratio: Double) -> Color {
+    if ratio >= 0.95 { return .red }
+    if ratio >= 0.85 { return .orange }
+    return Color(red: 0.12, green: 0.54, blue: 0.94)
+}
+
+private func memoryUsageNotice(ratio: Double, language: AppInterfaceLanguage) -> String {
+    if ratio >= 0.95 { return language.text(" · Very high usage", " · 매우 높은 사용량") }
+    if ratio >= 0.85 { return language.text(" · High usage", " · 높은 사용량") }
+    return ""
+}
+
+private struct HostMemoryView: View {
+    let memory: HostMemoryReading?
+    let language: AppInterfaceLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let memory {
+                ThinMetricBar(
+                    title: language.text("Server RAM", "서버 RAM"),
+                    valueText: "\(memory.usagePercent)% · \(HostMemoryReading.capacityText(kibibytes: memory.usedKiB)) / \(HostMemoryReading.capacityText(kibibytes: memory.totalKiB))",
+                    ratio: memory.usageRatio,
+                    tint: memoryTint(ratio: memory.usageRatio)
+                )
+
+                Text(language.text("Available: ", "사용 가능: ") + HostMemoryReading.capacityText(kibibytes: memory.availableKiB) + memoryUsageNotice(ratio: memory.usageRatio, language: language))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(memoryTint(ratio: memory.usageRatio))
+
+                if let swapTotal = memory.swapTotalKiB, let swapUsed = memory.swapUsedKiB, let swapRatio = memory.swapUsageRatio {
+                    if swapTotal == 0 {
+                        Text(language.text("Swap: Not configured", "Swap: 설정되지 않음"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ThinMetricBar(
+                            title: "Swap",
+                            valueText: "\(HostMemoryReading.capacityText(kibibytes: swapUsed)) / \(HostMemoryReading.capacityText(kibibytes: swapTotal))",
+                            ratio: swapRatio,
+                            tint: memoryTint(ratio: swapRatio)
+                        )
+                    }
+                } else {
+                    Text(language.text("Swap: Unavailable", "Swap: 확인 불가"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text(language.text("Server RAM / Swap: Unavailable", "서버 RAM / Swap: 확인 불가"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
+        .help(language.text(
+            "RAM uses Linux MemTotal − MemAvailable. Orange ≥85%, red ≥95%. Samples follow the polling interval and can miss brief peaks. Host totals do not reflect container or job memory limits; usage alone cannot confirm OOM.",
+            "RAM은 Linux MemTotal − MemAvailable 기준입니다. 주황 ≥85%, 빨강 ≥95%. Polling 사이의 순간 최대 사용량은 놓칠 수 있습니다. 호스트 합계는 컨테이너나 작업별 제한을 반영하지 않으며 사용량만으로 OOM을 확정할 수 없습니다."
+        ))
     }
 }
 
